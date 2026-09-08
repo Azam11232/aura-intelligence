@@ -459,6 +459,27 @@ const overallGoalProgress =
   totalGoalTarget > 0
     ? (totalGoalSavings / totalGoalTarget) * 100
     : 0;
+    let financialHealthScore = 0;
+
+// Wallet connected
+if (isConnected) {
+  financialHealthScore += 25;
+}
+
+// Portfolio has assets
+if (detectedAssets > 0) {
+  financialHealthScore += 25;
+}
+
+// Financial goals created
+if (totalGoals > 0) {
+  financialHealthScore += 25;
+}
+
+// Savings progress
+if (overallGoalProgress > 0) {
+  financialHealthScore += 25;
+}
 useEffect(() => {
   async function fetchTransactions() {
     if (!address) {
@@ -1219,7 +1240,78 @@ useEffect(() => {
           </section>
 
         )}
+        
 
+{/* FINANCIAL HEALTH SCORE */}
+
+{isConnected && (
+  <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+
+    <div className="flex items-center justify-between">
+
+      <div>
+        <p className="text-sm text-zinc-500">
+          FINANCIAL HEALTH SCORE
+        </p>
+
+        <h2 className="mt-1 text-xl font-semibold">
+          Your Financial Position
+        </h2>
+      </div>
+
+      <div className="text-right">
+        <p className="text-3xl font-bold text-emerald-400">
+          {financialHealthScore}/100
+        </p>
+
+        <p className="mt-1 text-xs text-zinc-500">
+          Financial Score
+        </p>
+      </div>
+
+    </div>
+
+    <div className="mt-5 h-3 overflow-hidden rounded-full bg-white/10">
+
+      <div
+        className="h-full rounded-full bg-emerald-400 transition-all duration-500"
+        style={{
+          width: `${financialHealthScore}%`,
+        }}
+      />
+
+    </div>
+
+    <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+
+      <div className="rounded-lg bg-black/20 p-3">
+        {isConnected ? "✓ Wallet Connected" : "○ Wallet Not Connected"}
+      </div>
+
+      <div className="rounded-lg bg-black/20 p-3">
+        {detectedAssets > 0
+          ? "✓ Portfolio Assets Detected"
+          : "○ No Portfolio Assets"}
+      </div>
+
+      <div className="rounded-lg bg-black/20 p-3">
+        {totalGoals > 0
+          ? "✓ Financial Goals Created"
+          : "○ No Financial Goals"}
+      </div>
+
+      <div className="rounded-lg bg-black/20 p-3">
+        {overallGoalProgress > 0
+          ? "✓ Savings Progress Started"
+          : "○ Start Saving Towards Goals"}
+      </div>
+
+    </div>
+
+  </section>
+)}
+
+{/* GOALS SUMMARY */}
 {/* GOALS SUMMARY */}
 
 {goals.length > 0 && (
