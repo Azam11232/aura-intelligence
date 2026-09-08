@@ -443,6 +443,22 @@ const updateGoalSavings = (id: string) => {
       previous.filter((goal) => goal.id !== id)
     );
   }
+  const totalGoals = goals.length;
+
+const totalGoalTarget = goals.reduce(
+  (total, goal) => total + goal.target,
+  0
+);
+
+const totalGoalSavings = goals.reduce(
+  (total, goal) => total + goal.current,
+  0
+);
+
+const overallGoalProgress =
+  totalGoalTarget > 0
+    ? (totalGoalSavings / totalGoalTarget) * 100
+    : 0;
 useEffect(() => {
   async function fetchTransactions() {
     if (!address) {
@@ -1204,7 +1220,56 @@ useEffect(() => {
 
         )}
 
+{/* GOALS SUMMARY */}
 
+{goals.length > 0 && (
+  <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+      <p className="text-xs text-zinc-500">
+        Total Goals
+      </p>
+
+      <p className="mt-2 text-2xl font-semibold text-white">
+        {totalGoals}
+      </p>
+    </div>
+
+
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+      <p className="text-xs text-zinc-500">
+        Total Target
+      </p>
+
+      <p className="mt-2 text-2xl font-semibold text-white">
+        {totalGoalTarget.toLocaleString()}
+      </p>
+    </div>
+
+
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+      <p className="text-xs text-zinc-500">
+        Total Savings
+      </p>
+
+      <p className="mt-2 text-2xl font-semibold text-emerald-400">
+        {totalGoalSavings.toLocaleString()}
+      </p>
+    </div>
+
+
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+      <p className="text-xs text-zinc-500">
+        Overall Progress
+      </p>
+
+      <p className="mt-2 text-2xl font-semibold text-emerald-400">
+        {overallGoalProgress.toFixed(1)}%
+      </p>
+    </div>
+
+  </section>
+)}
         {/* GOALS LIST */}
 
         {goals.length > 0 && (
