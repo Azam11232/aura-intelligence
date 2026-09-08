@@ -24,6 +24,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+  <meta
+    name="base:app_id"
+    content="6a9ebc875538a47d1b071bfb"
+  />
+</head>
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
       </body>
