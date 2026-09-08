@@ -115,7 +115,7 @@ const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [goalTarget, setGoalTarget] = useState("");
   const [goalCurrent, setGoalCurrent] = useState("");
   const [goalDeadline, setGoalDeadline] = useState("");
-
+const [savingAmount, setSavingAmount] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const { address, isConnected, chain } = useAccount();
@@ -389,7 +389,27 @@ Important: Do not invent assets that are not provided. Do not promise financial 
     setChatHistory([]);
     setMessage("");
   }
+const updateGoalSavings = (id: string) => {
+  const amount = Number(savingAmount);
 
+  if (!amount || amount <= 0) {
+    alert("Please enter a valid savings amount");
+    return;
+  }
+
+  setGoals((currentGoals) =>
+    currentGoals.map((goal) =>
+      goal.id === id
+        ? {
+            ...goal,
+            current: goal.current + amount,
+          }
+        : goal
+    )
+  );
+
+  setSavingAmount("");
+};
   function addGoal() {
     if (!goalName.trim()) {
       alert("Please enter a goal name.");
@@ -1244,7 +1264,25 @@ useEffect(() => {
 
 
                     <div className="mt-5 flex justify-between text-sm">
+<div className="mt-4 flex gap-2">
 
+  <input
+    type="number"
+    value={savingAmount}
+    onChange={(e) => setSavingAmount(e.target.value)}
+    placeholder="Add savings amount"
+    className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none placeholder:text-zinc-600 focus:border-emerald-500/40"
+  />
+
+  <button
+    type="button"
+    onClick={() => updateGoalSavings(goal.id)}
+    className="whitespace-nowrap rounded-lg bg-emerald-400 px-4 py-2 text-sm font-medium text-black hover:bg-emerald-300"
+  >
+    Add Savings
+  </button>
+
+</div>
                       <span className="text-zinc-400">
                         {goal.current.toLocaleString()}
                       </span>
@@ -1465,11 +1503,11 @@ useEffect(() => {
 
               <button
    type="button"
-  onClick={() => {
-    alert("BUTTON WORKING");
-    setShowGoalForm(true);
-  }}
-  className="w-full rounded-xl border border-white/10 p-4 text-left transition hover:bg-white/5"
+onClick={() => {
+  console.log("GOAL BUTTON CLICKED");
+  setShowGoalForm(true);
+}}
+className="w-full rounded-xl border border-white/10 p-4 text-left transition hover:bg-white/5"
 >
   <p className="font-medium">
     Set Financial Goal
