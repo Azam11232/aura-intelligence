@@ -373,17 +373,19 @@ Important: Do not invent assets that are not provided. Do not promise financial 
   }
 
   function connectWallet() {
-    const connector = connectors[0];
+  const injectedConnector = connectors.find(
+    (connector) => connector.type === "injected"
+  );
 
-    if (!connector) {
-      alert(
-        "No wallet detected. Please install MetaMask or another browser wallet."
-      );
-      return;
-    }
-
-    connect({ connector });
+  if (!injectedConnector) {
+    alert(
+      "No browser wallet detected. Please install MetaMask."
+    );
+    return;
   }
+
+  connect({ connector: injectedConnector });
+}
 
   function clearChat() {
     setChatHistory([]);
@@ -591,7 +593,7 @@ useEffect(() => {
 
         {/* WALLET INFO */}
 
-        {true && (
+       {isConnected && (
           <section className="mb-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-6">
 
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -945,7 +947,7 @@ useEffect(() => {
   </section>
 )}
 {/* RECENT ONCHAIN ACTIVITY */}
-{true && (
+{isConnected && (
   <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
     <div className="flex items-center justify-between">
       <div>
