@@ -1228,7 +1228,36 @@ useEffect(() => {
                   (goal.current / goal.target) * 100,
                   100
                 );
+const remaining = Math.max(
+  goal.target - goal.current,
+  0
+);
 
+const deadlineDate = goal.deadline
+  ? new Date(goal.deadline)
+  : null;
+
+const today = new Date();
+
+const daysRemaining = deadlineDate
+  ? Math.max(
+      Math.ceil(
+        (deadlineDate.getTime() - today.getTime()) /
+          (1000 * 60 * 60 * 24)
+      ),
+      0
+    )
+  : null;
+
+const monthsRemaining =
+  daysRemaining !== null
+    ? Math.max(daysRemaining / 30, 1)
+    : null;
+
+const monthlySavingsNeeded =
+  monthsRemaining !== null
+    ? remaining / monthsRemaining
+    : null;
                 return (
 
                   <div
@@ -1315,7 +1344,72 @@ useEffect(() => {
                       <p className="text-xs font-medium text-emerald-400">
                         {progress.toFixed(1)}%
                       </p>
+{goal.deadline && (
+  <div className="mt-5 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-3">
+<div className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2">
 
+  <div>
+    <p className="text-xs text-zinc-500">
+      Remaining
+    </p>
+
+    <p className="mt-1 text-sm font-medium text-white">
+      {(goal.target - goal.current).toLocaleString()}
+    </p>
+  </div>
+
+  <div>
+    <p className="text-xs text-zinc-500">
+      Days Left
+    </p>
+
+    <p className="mt-1 text-sm font-medium text-white">
+      {goal.deadline
+        ? Math.max(
+            Math.ceil(
+              (new Date(goal.deadline).getTime() - Date.now()) /
+                (1000 * 60 * 60 * 24)
+            ),
+            0
+          )
+        : "No deadline"}
+    </p>
+  </div>
+
+</div>
+    <div>
+      <p className="text-xs text-zinc-500">
+        Remaining
+      </p>
+      <p className="mt-1 text-sm font-medium text-white">
+        {remaining.toLocaleString()}
+      </p>
+    </div>
+
+    <div>
+      <p className="text-xs text-zinc-500">
+        Days Left
+      </p>
+      <p className="mt-1 text-sm font-medium text-white">
+        {daysRemaining}
+      </p>
+    </div>
+
+    <div>
+      <p className="text-xs text-zinc-500">
+        Monthly Needed
+      </p>
+      <p className="mt-1 text-sm font-medium text-emerald-400">
+        {monthlySavingsNeeded
+          ? monthlySavingsNeeded.toLocaleString(undefined, {
+              maximumFractionDigits: 0,
+            })
+          : "0"}
+      </p>
+    </div>
+
+  </div>
+)}
                     </div>
 
                   </div>
