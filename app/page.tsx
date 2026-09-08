@@ -523,12 +523,12 @@ useEffect(() => {
 
         <div>
           <p className="text-xl font-semibold tracking-tight">
-            AURA
-          </p>
+  AURA Intelligence
+</p>
 
-          <p className="text-xs text-zinc-500">
-            Financial Intelligence
-          </p>
+<p className="text-xs text-zinc-500">
+  Your Autonomous Financial Agent
+</p>
         </div>
 
         <div className="flex items-center gap-4">

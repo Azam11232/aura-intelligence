@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AURA - Financial Intelligence",
-  description: "Your autonomous onchain financial agent",
+  title: "AURA Intelligence",
+  description: "Your autonomous onchain financial intelligence platform",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
