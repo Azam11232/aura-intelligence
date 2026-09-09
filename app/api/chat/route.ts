@@ -111,7 +111,7 @@ let goalsContext: any[] = [];
 message = body.message;
 walletContext = body.walletContext || null;
 goalsContext = body.goalsContext || [];
-console.log("GOALS CONTEXT:", goalsContext);
+
     if (!message || !message.trim()) {
       return NextResponse.json(
         { error: "Message is required" },

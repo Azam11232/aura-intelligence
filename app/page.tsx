@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   useAccount,
   useBalance,
   useDisconnect,
   useConnect,
   useReadContract,
+  useSwitchChain,
 } from "wagmi";
 import { useRouter } from "next/navigation";
 import { formatUnits } from "viem";
@@ -48,6 +49,14 @@ type Transaction = {
     blockTimestamp?: string;
   };
 };
+type PortfolioAsset = {
+  contractAddress: string;
+  balance: number;
+  name: string;
+  symbol: string;
+  decimals: number;
+  logo: string | null;
+};
 type FinancialGoal = {
   id: string;
   name: string;
@@ -83,7 +92,28 @@ function getTimeAgo(timestamp?: string) {
   return `${years} years ago`;
 }
 export default function Dashboard() {
+  const [mousePosition, setMousePosition] = useState({
+  x: 0,
+  y: 0,
+});
+
+const landingRef = useRef<HTMLDivElement>(null);
+const handleMouseMove = useCallback(
+  (event: React.MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+
+    const x = (event.clientX - rect.left) / rect.width - 0.5;
+    const y = (event.clientY - rect.top) / rect.height - 0.5;
+
+    setMousePosition({
+      x,
+      y,
+    });
+  },
+  []
+);
   const [mounted, setMounted] = useState(false);
+  const [enteredDashboard, setEnteredDashboard] = useState(false);
 const [ethPrice, setEthPrice] = useState<number | null>(null);
 const [priceLoading, setPriceLoading] = useState(true);
 useEffect(() => {
@@ -108,6 +138,9 @@ useEffect(() => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
 const [transactions, setTransactions] = useState<Transaction[]>([]);
 const [transactionsLoading, setTransactionsLoading] = useState(false);
+const [realAssets, setRealAssets] = useState<PortfolioAsset[]>([]);
+const [assetsLoading, setAssetsLoading] = useState(false);
+const [portfolioUsdValue, setPortfolioUsdValue] = useState(0);
   // GOALS
   const [goals, setGoals] = useState<FinancialGoal[]>([]);
   const [showGoalForm, setShowGoalForm] = useState(false);
@@ -116,10 +149,76 @@ const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [goalCurrent, setGoalCurrent] = useState("");
   const [goalDeadline, setGoalDeadline] = useState("");
 const [savingAmount, setSavingAmount] = useState("");
+const [showWalletModal, setShowWalletModal] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const { address, isConnected, chain } = useAccount();
+  const { switchChain, isPending: switchLoading } = useSwitchChain();
+  const isOnBase = chain?.id === 8453;
   const { disconnect } = useDisconnect();
+  useEffect(() => {
+  async function fetchTransactions() {
+    if (!address || !isConnected || !isOnBase) {
+      setTransactions([]);
+      return;
+    }
+
+    try {
+      setTransactionsLoading(true);
+
+      const response = await fetch(
+        `/api/transactions?address=${address}`
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setTransactions(data.transactions || []);
+      } else {
+        console.error("Transaction fetch error:", data.error);
+        setTransactions([]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch transactions:", error);
+      setTransactions([]);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  }
+
+  fetchTransactions();
+}, [address, isConnected, isOnBase]);
+useEffect(() => {
+  async function fetchAssets() {
+    if (!address || !isConnected || !isOnBase) {
+      setRealAssets([]);
+      return;
+    }
+
+    try {
+      setAssetsLoading(true);
+
+      const response = await fetch(
+        `/api/assets?address=${address}`
+      );
+
+      const data = await response.json();
+
+      if (data.assets) {
+        setRealAssets(data.assets);
+      } else {
+        setRealAssets([]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch portfolio assets:", error);
+      setRealAssets([]);
+    } finally {
+      setAssetsLoading(false);
+    }
+  }
+
+  fetchAssets();
+}, [address, isConnected, isOnBase]);
 const sentTransactions = transactions.filter(
   (tx) => tx.from.toLowerCase() === address?.toLowerCase()
 );
@@ -151,9 +250,19 @@ const activityLevel =
     : transactions.length > 0
     ? "Low"
     : "No Activity";
-    const assetSummary = transactions.reduce(
+   const assetSummary = transactions.reduce(
   (summary: Record<string, number>, tx) => {
-    const asset = tx.asset || "Unknown";
+    let asset = tx.asset || "Unknown";
+
+    asset = asset
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9]/g, "")
+      .toUpperCase();
+
+    if (asset === "USD" || asset === "USDC") {
+      asset = "USDC";
+    }
 
     summary[asset] = (summary[asset] || 0) + 1;
 
@@ -267,7 +376,8 @@ const portfolioAssets = [
   },
 ];
 
-const detectedAssets = isConnected ? 2 : 0;
+const detectedAssets =
+  (isConnected ? 1 : 0) + realAssets.length;
   async function askAura(customMessage?: string) {
     const userMessage = customMessage || message;
 
@@ -357,7 +467,11 @@ const detectedAssets = isConnected ? 2 : 0;
 Wallet Address: ${address}
 Network: ${chain?.name || "Unknown"}
 Native Balance: ${formattedBalance} ${balance?.symbol || "ETH"}
-
+USDC Balance: ${formattedUsdcBalance} USDC
+Detected Portfolio Assets: ${realAssets.length}
+Portfolio Value: $${totalPortfolioValue.toFixed(2)}
+ETH Allocation: ${ethAllocation.toFixed(1)}%
+USDC Allocation: ${usdcAllocation.toFixed(1)}%
 Give me a clear portfolio intelligence summary.
 
 Include:
@@ -371,20 +485,21 @@ Important: Do not invent assets that are not provided. Do not promise financial 
 
     await askAura(portfolioMessage);
   }
+function getWalletIcon(name: string, icon?: string) {
+  if (icon) return icon;
 
+  const walletIcons: Record<string, string> = {
+    MetaMask:
+  "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg",
+
+    "Coinbase Wallet":
+      "https://avatars.githubusercontent.com/u/1885080?s=200&v=4",
+  };
+
+  return walletIcons[name] || "";
+}
   function connectWallet() {
-  const injectedConnector = connectors.find(
-    (connector) => connector.type === "injected"
-  );
-
-  if (!injectedConnector) {
-    alert(
-      "No browser wallet detected. Please install MetaMask."
-    );
-    return;
-  }
-
-  connect({ connector: injectedConnector });
+  setShowWalletModal(true);
 }
 
   function clearChat() {
@@ -515,7 +630,133 @@ useEffect(() => {
       <main className="min-h-screen bg-[#08090b] text-white" />
     );
   }
+if (!enteredDashboard) {
+  return (
+    <main
+  ref={landingRef}
+  onMouseMove={handleMouseMove}
+  onMouseLeave={() =>
+    setMousePosition({ x: 0, y: 0 })
+  }
+  className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#08090b] px-6 text-white"
+>
+<div
+  className="absolute inset-0 transition-transform duration-200 ease-out"
+  style={{
+    transform: `scale(1.08) translate(${mousePosition.x * -20}px, ${mousePosition.y * -20}px)`,
+  }}
+>
+  <div
+  className="absolute inset-0 transition-transform duration-200 ease-out"
+  style={{
+    transform: `scale(1.08) translate(${mousePosition.x * -20}px, ${mousePosition.y * -20}px)`,
+  }}
+>
+  <div
+  className="aura-background absolute inset-0 bg-cover bg-center bg-no-repeat opacity-80"
+  style={{
+    backgroundImage: "url('/aura-background.jpg')",
+    backgroundPosition: "center 35%",
+    transform: `scale(1.08) translate(${mousePosition.x * -8}px, ${mousePosition.y * -8}px)`,
+  }}
+/>
 
+  <div className="absolute inset-0 bg-gradient-to-r from-[#08090b] via-[#08090b]/75 to-[#08090b]/70" />
+
+  <div className="absolute inset-0 bg-gradient-to-t from-[#08090b] via-transparent to-[#08090b]/55" />
+</div>
+
+{/* Dark cinematic overlay */}
+<div className="absolute inset-0 bg-gradient-to-r from-[#08090b] via-[#08090b]/75 to-[#08090b]/20" />
+
+{/* Bottom fade */}
+<div className="absolute inset-0 bg-gradient-to-t from-[#08090b] via-transparent to-[#08090b]/30" />
+  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-emerald-500/10" />
+</div>
+      {/* Background glow */}
+      <div className="absolute -left-40 -top-40 h-96 w-96 rounded-full bg-blue-500/10 blur-3xl" />
+
+      <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl" />
+
+      {/* Content */}
+      <div className="relative z-10 mx-auto max-w-3xl text-center">
+
+        <div className="mb-8 inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-400">
+          ● AURA Intelligence Online
+        </div>
+
+        <p className="text-sm tracking-[0.3em] text-zinc-500">
+          AUTONOMOUS FINANCIAL INTELLIGENCE
+        </p>
+
+        <h1 className="mt-6 text-5xl font-bold tracking-tight md:text-7xl">
+          Understand your
+          <span className="block text-emerald-400">
+            financial world.
+          </span>
+        </h1>
+
+        <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-zinc-400">
+          AURA brings your wallet activity, portfolio intelligence,
+          financial goals, and AI-powered insights into one place.
+        </p>
+
+        <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
+
+          <button
+            onClick={() => setEnteredDashboard(true)}
+            className="rounded-xl bg-emerald-400 px-7 py-4 font-medium text-black transition hover:scale-105 hover:bg-emerald-300"
+          >
+            Enter AURA →
+          </button>
+
+        </div>
+
+        <div className="mt-16 grid gap-4 text-left sm:grid-cols-3">
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-sm text-emerald-400">
+              01
+            </p>
+            <h3 className="mt-3 font-medium">
+              Wallet Intelligence
+            </h3>
+            <p className="mt-2 text-sm text-zinc-500">
+              Understand your onchain activity and assets.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-sm text-emerald-400">
+              02
+            </p>
+            <h3 className="mt-3 font-medium">
+              Portfolio Analysis
+            </h3>
+            <p className="mt-2 text-sm text-zinc-500">
+              Track your portfolio and asset distribution.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-sm text-emerald-400">
+              03
+            </p>
+            <h3 className="mt-3 font-medium">
+              Financial Goals
+            </h3>
+            <p className="mt-2 text-sm text-zinc-500">
+              Create goals and monitor your financial progress.
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+
+    </main>
+  );
+}
   return (
     <main className="min-h-screen bg-[#08090b] text-white">
 
@@ -625,7 +866,32 @@ useEffect(() => {
           </section>
         )}
 
+{isConnected && !isOnBase && (
+  <section className="mb-6 rounded-2xl border border-yellow-500/30 bg-yellow-500/5 p-6">
+    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
 
+      <div>
+        <p className="text-sm font-medium text-yellow-400">
+          ⚠ Wrong Network
+        </p>
+
+        <p className="mt-2 text-sm text-zinc-400">
+          AURA Intelligence works on the Base network.
+          Please switch your wallet to Base.
+        </p>
+      </div>
+
+      <button
+        onClick={() => switchChain({ chainId: 8453 })}
+        disabled={switchLoading}
+        className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
+      >
+        {switchLoading ? "Switching..." : "Switch to Base"}
+      </button>
+
+    </div>
+  </section>
+)}
         {/* STATS */}
 
         <section className="grid gap-4 md:grid-cols-3">
@@ -883,7 +1149,83 @@ useEffect(() => {
     <p className="mt-5 text-xs text-zinc-600">
       Currently monitoring native ETH and USDC assets on Base.
     </p>
+{isConnected && (
+  <div className="mt-8 border-t border-white/10 pt-6">
 
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm text-blue-400">
+          REAL ONCHAIN ASSETS
+        </p>
+
+        <h3 className="mt-1 text-xl font-semibold text-white">
+          Detected Base Tokens
+        </h3>
+      </div>
+
+      <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs text-blue-400">
+        {assetsLoading ? "Loading..." : `${realAssets.length} Assets`}
+      </span>
+    </div>
+
+    {assetsLoading ? (
+      <p className="mt-5 text-sm text-zinc-500">
+        Loading portfolio assets...
+      </p>
+    ) : realAssets.length === 0 ? (
+      <p className="mt-5 text-sm text-zinc-500">
+        No additional token assets detected on Base.
+      </p>
+    ) : (
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        {realAssets.map((asset) => (
+          <div
+            key={asset.contractAddress}
+            className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 p-4"
+          >
+            <div className="flex items-center gap-3">
+
+              {asset.logo ? (
+                <img
+                  src={asset.logo}
+                  alt={asset.symbol}
+                  className="h-10 w-10 rounded-full"
+                />
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10 text-sm font-semibold text-blue-400">
+                  {asset.symbol.slice(0, 2)}
+                </div>
+              )}
+
+              <div>
+                <p className="font-medium text-white">
+                  {asset.symbol}
+                </p>
+
+                <p className="text-xs text-zinc-500">
+                  {asset.name}
+                </p>
+              </div>
+
+            </div>
+
+            <div className="text-right">
+              <p className="font-medium text-emerald-400">
+                {asset.balance.toFixed(4)}
+              </p>
+
+              <p className="mt-1 text-xs text-zinc-600">
+                Base
+              </p>
+            </div>
+
+          </div>
+        ))}
+      </div>
+    )}
+
+  </div>
+)}
   </section>
 
 )}{/* PORTFOLIO HEALTH SCORE */}
@@ -1001,46 +1343,58 @@ useEffect(() => {
             key={tx.uniqueId || tx.hash}
             className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 p-4"
           >
-            <div>
-              <div className="flex items-center gap-2">
-  <span
-    className={`rounded-full px-2 py-1 text-xs font-medium ${
+            <div className="flex items-start gap-3">
+  <div
+    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ${
       tx.from.toLowerCase() === address?.toLowerCase()
         ? "bg-red-500/10 text-red-400"
         : "bg-emerald-500/10 text-emerald-400"
     }`}
   >
-    {tx.from.toLowerCase() === address?.toLowerCase()
-      ? "Sent"
-      : "Received"}
-  </span>
+    {tx.from.toLowerCase() === address?.toLowerCase() ? "↑" : "↓"}
+  </div>
 
-  <span className="text-xs text-zinc-500">
-  {tx.category === "erc20"
-    ? "ERC-20 Token"
-    : tx.category === "erc721"
-    ? "NFT"
-    : tx.category === "external"
-    ? "External Transfer"
-    : tx.category}
-</span>
+  <div>
+    <div className="flex items-center gap-2">
+      <span
+        className={`rounded-full px-2 py-1 text-xs font-medium ${
+          tx.from.toLowerCase() === address?.toLowerCase()
+            ? "bg-red-500/10 text-red-400"
+            : "bg-emerald-500/10 text-emerald-400"
+        }`}
+      >
+        {tx.from.toLowerCase() === address?.toLowerCase()
+          ? "↑ Sent"
+          : "↓ Received"}
+      </span>
+
+      <span className="text-xs text-zinc-500">
+        {tx.category === "erc20"
+          ? "ERC-20 Token"
+          : tx.category === "erc721"
+          ? "NFT"
+          : tx.category === "external"
+          ? "External Transfer"
+          : tx.category}
+      </span>
+    </div>
+
+    <p className="mt-1 text-xs text-zinc-500">
+      {tx.to
+        ? `${tx.to.slice(0, 6)}...${tx.to.slice(-4)}`
+        : "Unknown address"}
+    </p>
+
+    <a
+      href={`https://basescan.org/tx/${tx.hash}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-2 inline-block text-xs text-blue-400 hover:text-blue-300"
+    >
+      View transaction ↗
+    </a>
+  </div>
 </div>
-
-              <p className="mt-1 text-xs text-zinc-500">
-  {tx.to
-    ? `${tx.to.slice(0, 6)}...${tx.to.slice(-4)}`
-    : "Unknown address"}
-</p>
-
-<a
-  href={`https://basescan.org/tx/${tx.hash}`}
-  target="_blank"
-  rel="noopener noreferrer"
-  className="mt-2 inline-block text-xs text-blue-400 hover:text-blue-300"
->
-  View transaction ↗
-</a>
-            </div>
 
             <div className="text-right">
               <p
@@ -1051,7 +1405,9 @@ useEffect(() => {
   }`}
 >
   {tx.from.toLowerCase() === address?.toLowerCase() ? "-" : "+"}
-  {Number(tx.value).toFixed(4)} {tx.asset || ""}
+  {Number(tx.value).toLocaleString(undefined, {
+  maximumFractionDigits: 4,
+})} {tx.asset || "ETH"}
 </p>
 
               <p className="mt-1 text-xs text-zinc-600">
@@ -1112,7 +1468,34 @@ useEffect(() => {
                       {balance?.symbol || "ETH"}
                     </p>
                   </div>
+<div>
+  <p className="text-zinc-500">
+    Portfolio Value
+  </p>
 
+  <p className="mt-1 text-emerald-400">
+    ${totalPortfolioValue.toFixed(2)}
+  </p>
+</div>
+<div>
+  <p className="text-zinc-500">
+    ETH Allocation
+  </p>
+
+  <p className="mt-1 text-blue-400">
+    {ethAllocation.toFixed(1)}%
+  </p>
+</div>
+
+<div>
+  <p className="text-zinc-500">
+    USDC Allocation
+  </p>
+
+  <p className="mt-1 text-emerald-400">
+    {usdcAllocation.toFixed(1)}%
+  </p>
+</div>
                   <div>
                     <p className="text-zinc-500">
                       Balance
@@ -1150,6 +1533,13 @@ useEffect(() => {
       {uniqueAssets.size}
     </p>
   </div>
+  <div>
+  <p className="text-zinc-500">Portfolio Assets</p>
+
+  <p className="mt-1 font-medium text-white">
+    {assetsLoading ? "Loading..." : realAssets.length}
+  </p>
+</div>
 </div>
 
               <button
@@ -1839,7 +2229,92 @@ className="w-full rounded-xl border border-white/10 p-4 text-left transition hov
         </section>
 
       </div>
+{/* WALLET SELECTION MODAL */}
 
+{showWalletModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+
+    <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111214] p-6 shadow-2xl">
+
+      <div className="flex items-center justify-between">
+
+        <div>
+          <h2 className="text-xl font-semibold text-white">
+            Connect Wallet
+          </h2>
+
+          <p className="mt-1 text-sm text-zinc-500">
+            Choose your preferred wallet
+          </p>
+        </div>
+
+        <button
+          onClick={() => setShowWalletModal(false)}
+          className="rounded-lg px-3 py-1 text-xl text-zinc-400 hover:bg-white/10 hover:text-white"
+        >
+          ×
+        </button>
+
+      </div>
+
+
+      <div className="mt-6 space-y-3">
+
+        {[...connectors]
+  .sort((a, b) => {
+    if (a.name === "Injected") return 1;
+    if (b.name === "Injected") return -1;
+    return 0;
+  })
+  .map((connector) => (
+          <button
+            key={connector.uid}
+            onClick={() => {
+              connect({ connector });
+              setShowWalletModal(false);
+            }}
+            disabled={connectLoading}
+            className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4 text-left transition hover:bg-white/[0.08] disabled:opacity-50"
+          >
+
+            <div className="flex items-center gap-3">
+
+  {getWalletIcon(connector.name, connector.icon) ? (
+  <img
+    src={getWalletIcon(connector.name, connector.icon)}
+    alt={`${connector.name} logo`}
+    className="h-9 w-9 rounded-full"
+  />
+) : (
+  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white">
+    {connector.name.charAt(0).toUpperCase()}
+  </div>
+)}
+
+  <span className="font-medium text-white">
+    {connector.name}
+  </span>
+
+</div>
+
+            <span className="text-sm text-zinc-500">
+              Connect →
+            </span>
+
+          </button>
+        ))}
+
+      </div>
+
+
+      <p className="mt-5 text-center text-xs text-zinc-600">
+        Your wallet remains under your control.
+      </p>
+
+    </div>
+
+  </div>
+)}
     </main>
   );
 }

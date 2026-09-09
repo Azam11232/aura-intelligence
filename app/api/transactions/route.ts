@@ -1,9 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAddress } from "viem";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const address = searchParams.get("address");
+
+    if (!address) {
+      return NextResponse.json(
+        { error: "Wallet address is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!isAddress(address)) {
+      return NextResponse.json(
+        { error: "Invalid wallet address" },
+        { status: 400 }
+      );
+    }
 
     if (!address) {
       return NextResponse.json(
